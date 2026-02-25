@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Env
+.env
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker data
+data/
+model-cache/
+
+# OS
+.DS_Store
+Thumbbs.db
+
+# Logs
+*.log
+logs/
+
+# QGIS temp
+*.qgz~
+*.qgs~
+projects/*.qgz
+
+# Large files
+*.onnx
+*.pt
+*.pth
+*.safetensors
+
+# Debug/temp artifacts
+.claude-session
+setup_qgis_connections.py
+
+# Session screenshots & debug exports (root level only)
+/*.png
+/*.geojson
+/*.json.bak
+/check_state.json
+/density_map.json
+/med_analysis.json
+/mediterranean_coast.json
+/mediterranean_full.json
+/sete_*.json
+
+# Scratch scripts
+gimp_*.py
+gimp_*.sh

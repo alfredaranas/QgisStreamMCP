@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QGIS Desktop — QgisStreamMCP</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1e1e2e; color: #cdd6f4; overflow-x: hidden; }
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: #181825; border-bottom: 1px solid #313244; }
+  .header h1 { font-size: 14px; font-weight: 600; color: #f38ba8; }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #a6adc8; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #f38ba8; }
+  .status-dot.online { background: #a6e3a1; }
+
+  .toolbar { display: flex; gap: 6px; padding: 6px 16px; background: #181825; border-bottom: 1px solid #313244; flex-wrap: wrap; align-items: center; }
+  .toolbar button { padding: 4px 12px; font-size: 11px; border: 1px solid #313244; background: #1e1e2e; color: #cdd6f4; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+  .toolbar button:hover { background: #313244; border-color: #45475a; }
+  .toolbar button.active { background: #cba6f7; color: #1e1e2e; border-color: #cba6f7; }
+  .toolbar .sep { width: 1px; height: 20px; background: #313244; margin: 0 4px; }
+  .toolbar .spacer { flex: 1; }
+
+  .canvas-wrapper {
+    position: relative; width: 100%; background: #11111b; min-height: 200px;
+    cursor: default; outline: none;
+  }
+  .canvas-wrapper:focus { box-shadow: inset 0 0 0 2px #cba6f740; }
+  .canvas-wrapper img { width: 100%; display: block; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+  .canvas-wrapper pre { padding: 16px; color: #cdd6f4; font-size: 12px; overflow: auto; white-space: pre-wrap; max-height: 500px; }
+
+  /* ── Drop overlay ─────────────────────────────────────────── */
+  .drop-overlay {
+    display: none; position: absolute; inset: 0; z-index: 100;
+    background: rgba(203, 166, 247, 0.12); border: 2px dashed #cba6f7;
+    justify-content: center; align-items: center;
+    pointer-events: none;
+  }
+  .drop-overlay.visible { display: flex; }
+  .drop-overlay span {
+    background: #181825; color: #cba6f7; padding: 10px 24px; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+  }
+
+  /* ── File panel ───────────────────────────────────────────── */
+  .file-panel { padding: 12px 16px; background: #181825; border-top: 1px solid #313244; display: none; }
+  .file-panel.visible { display: block; }
+  .file-panel-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+  }
+  .file-panel-header h3 { font-size: 12px; color: #a6adc8; }
+  .file-panel-header .file-count { font-size: 10px; color: #585b70; margin-left: 6px; }
+  .file-panel-header button {
+    padding: 2px 8px; font-size: 10px; border: 1px solid #313244;
+    background: #1e1e2e; color: #a6adc8; border-radius: 4px; cursor: pointer;
+  }
+  .file-panel-header button:hover { background: #313244; }
+
+  .file-section { margin-bottom: 6px; }
+  .file-section-label {
+    font-size: 10px; color: #585b70; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 4px 8px; border-bottom: 1px solid #313244; margin-bottom: 2px;
+  }
+  .file-list { font-size: 11px; max-height: 240px; overflow-y: auto; }
+  .file-list::-webkit-scrollbar { width: 4px; }
+  .file-list::-webkit-scrollbar-track { background: transparent; }
+  .file-list::-webkit-scrollbar-thumb { background: #45475a; border-radius: 2px; }
+
+  .file-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 4px; transition: background 0.1s;
+  }
+  .file-item:hover { background: #313244; }
+  .file-icon { flex-shrink: 0; width: 16px; text-align: center; font-size: 12px; }
+  .file-name {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #89b4fa; cursor: pointer;
+  }
+  .file-name:hover { color: #b4befe; text-decoration: underline; }
+  .file-meta { flex-shrink: 0; font-size: 10px; color: #585b70; white-space: nowrap; }
+  .file-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+  .file-item:hover .file-actions { opacity: 1; }
+  .file-actions button {
+    background: none; border: none; cursor: pointer; padding: 2px 4px;
+    font-size: 12px; border-radius: 3px; color: #a6adc8; transition: all 0.1s;
+  }
+  .file-actions button:hover { background: #45475a; }
+  .file-actions button.dl:hover { color: #a6e3a1; }
+  .file-actions button.del:hover { color: #f38ba8; }
+  .toolbar a { padding: 4px 12px; font-size: 11px; border: 1px solid #313244; background: #1e1e2e; color: #cdd6f4; border-radius: 6px; cursor: pointer; transition: all 0.15s; text-decoration: none; display: inline-flex; align-items: center; }
+  .toolbar a:hover { background: #313244; border-color: #45475a; }
+  .file-actions a { background: none; border: none; cursor: pointer; padding: 2px 4px; font-size: 12px; border-radius: 3px; color: #a6adc8; transition: all 0.1s; text-decoration: none; }
+  .file-actions a:hover { background: #45475a; }
+  .file-actions a.dl:hover { color: #a6e3a1; }
+  a.file-name { text-decoration: none; }
+
+  .file-empty { color: #585b70; padding: 12px 8px; text-align: center; font-size: 11px; }
+
+  .info-bar { padding: 6px 16px; font-size: 11px; color: #6c7086; background: #181825; border-top: 1px solid #313244; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>QGIS Desktop</h1>
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button onclick="doScreenshot()" id="btnScreenshot">Screenshot</button>
+    <button onclick="doProjectInfo()" id="btnInfo">Project Info</button>
+    <div class="sep"></div>
+    <button onclick="doUpload()" id="btnUpload">Upload File</button>
+    <button onclick="toggleFiles()" id="btnFiles">Files</button>
+    <div class="spacer"></div>
+    <button onclick="openVncPopout()" id="btnPopout" title="Copy noVNC URL to clipboard">Pop-out &#x2197;</button>
+  </div>
+
+  <input type="file" id="fileInput" style="display:none" multiple
+         accept=".shp,.dbf,.shx,.prj,.geojson,.gpkg,.tif,.tiff,.csv,.qgz,.qgs,.zip,.gml,.json,.qml,.sld">
+
+  <div class="canvas-wrapper" id="canvasWrapper" tabindex="0">
+    <img id="liveImg" alt="QGIS Desktop" style="width:100%;display:block">
+    <div class="drop-overlay" id="dropOverlay"><span>Drop files to upload</span></div>
+  </div>
+
+  <div class="file-panel" id="filePanel">
+    <div class="file-panel-header">
+      <h3>Files <span class="file-count" id="fileCount"></span></h3>
+      <button onclick="doListFiles()">Refresh</button>
+    </div>
+    <div class="file-list" id="fileList"></div>
+  </div>
+
+  <div class="info-bar" id="infoBar">Ready</div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────
+const VNC_URL    = 'http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000';
+const FRAME_URL  = 'http://127.0.0.1:8081/frame';
+const INPUT_URL  = 'http://127.0.0.1:8080/api/input';
+const API_BASE   = 'http://127.0.0.1:8080';
+const DISPLAY_W  = 1920;
+const DISPLAY_H  = 1080;
+
+let mcpInitialized = false;
+let mcpRequestId = 1;
+const mcpPendingRequests = {};
+let liveTimer = null;
+let lastBlobUrl = null;
+let currentMode = 'live';  // 'live', 'screenshot', 'info'
+let useFetchFrames = true;
+let filePanelOpen = false;
+
+// ── File type icons (Unicode) ────────────────────────────────
+const FILE_ICONS = {
+  vector:  '\u{1F310}',  // globe
+  raster:  '\u{1F5BC}',  // framed picture
+  project: '\u{1F4C2}',  // open folder
+  table:   '\u{1F4CA}',  // bar chart
+  doc:     '\u{1F4C4}',  // page
+  style:   '\u{1F3A8}',  // palette
+  archive: '\u{1F4E6}',  // package
+  generic: '\u{1F4CE}',  // paperclip
+};
+
+const QGIS_VECTOR_EXTS = ['.gpkg','.geojson','.shp','.gml','.kml','.kmz','.gdb','.csv','.geojsonl'];
+const QGIS_RASTER_EXTS = ['.tif','.tiff','.ecw','.jp2','.img','.asc','.dem'];
+const QGIS_PROJECT_EXTS = ['.qgz','.qgs'];
+
+function fileIcon(name) {
+  const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+  if (QGIS_VECTOR_EXTS.includes(ext)) return FILE_ICONS.vector;
+  if (QGIS_RASTER_EXTS.includes(ext)) return FILE_ICONS.raster;
+  if (QGIS_PROJECT_EXTS.includes(ext)) return FILE_ICONS.project;
+  if (['.json','.jsonl','.xlsx','.xls','.ods','.dbf'].includes(ext)) return FILE_ICONS.table;
+  if (['.pdf','.txt','.md','.html'].includes(ext)) return FILE_ICONS.doc;
+  if (['.qml','.sld'].includes(ext)) return FILE_ICONS.style;
+  if (['.zip','.tar','.gz','.7z'].includes(ext)) return FILE_ICONS.archive;
+  return FILE_ICONS.generic;
+}
+
+function getQgisFileType(name) {
+  const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+  if (QGIS_PROJECT_EXTS.includes(ext)) return 'project';
+  if (QGIS_RASTER_EXTS.includes(ext)) return 'raster';
+  if (QGIS_VECTOR_EXTS.includes(ext)) return 'vector';
+  return null;
+}
+
+// ── MCP Apps Protocol ────────────────────────────────────────
+function initMcpApp() {
+    if (window.parent === window) return;
+    window.addEventListener('message', handleMcpMessage);
+    window.parent.postMessage({
+        jsonrpc: '2.0', id: mcpRequestId++,
+        method: 'ui/initialize',
+        params: {
+            protocolVersion: '2026-01-26',
+            appInfo: { name: 'QgisStreamMCP', version: '1.0.0' },
+            appCapabilities: { tools: { listChanged: false }, availableDisplayModes: ['inline'] }
+        }
+    }, '*');
+}
+
+function handleMcpMessage(event) {
+    const data = event.data;
+    if (!data || data.jsonrpc !== '2.0') return;
+    if (data.id !== undefined && (data.result !== undefined || data.error !== undefined)) {
+        if (!mcpInitialized && data.result) {
+            mcpInitialized = true;
+            document.getElementById('statusDot').classList.add('online');
+            document.getElementById('statusText').textContent = 'Connected';
+            window.parent.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/initialized', params: {} }, '*');
+            setupAutoResize();
+            startLive();
+        }
+        if (mcpPendingRequests[data.id]) {
+            if (data.error) mcpPendingRequests[data.id].reject(new Error(data.error.message || 'MCP error'));
+            else mcpPendingRequests[data.id].resolve(data.result);
+            delete mcpPendingRequests[data.id];
+        }
+    }
+}
+
+function setupAutoResize() {
+    let lastW = 0, lastH = 0;
+    function send() {
+        requestAnimationFrame(() => {
+            const w = Math.ceil(document.documentElement.scrollWidth);
+            const h = Math.ceil(document.documentElement.scrollHeight);
+            if (w !== lastW || h !== lastH) {
+                lastW = w; lastH = h;
+                window.parent.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { width: w, height: h } }, '*');
+            }
+        });
+    }
+    send();
+    new ResizeObserver(send).observe(document.body);
+}
+
+async function callTool(name, args) {
+    if (!mcpInitialized) throw new Error('Not connected');
+    const id = mcpRequestId++;
+    return new Promise((resolve, reject) => {
+        mcpPendingRequests[id] = { resolve, reject };
+        window.parent.postMessage({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } }, '*');
+        setTimeout(() => { if (mcpPendingRequests[id]) { delete mcpPendingRequests[id]; reject(new Error('Timeout')); } }, 60000);
+    });
+}
+
+function updateContext(text, imageB64) {
+    if (!mcpInitialized) return;
+    const content = [{ type: 'text', text }];
+    if (imageB64) content.push({ type: 'image', data: imageB64, mimeType: 'image/png' });
+    window.parent.postMessage({ jsonrpc: '2.0', id: mcpRequestId++, method: 'ui/update-model-context', params: { content } }, '*');
+}
+
+// ── Live Frame Feed ──────────────────────────────────────────
+async function fetchFrame() {
+    try {
+        const resp = await fetch(FRAME_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const blob = await resp.blob();
+        if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+        lastBlobUrl = URL.createObjectURL(blob);
+        const el = document.getElementById('liveImg');
+        if (el) el.src = lastBlobUrl;
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+async function fetchFrameViaBridge() {
+    try {
+        const result = await callTool('get_screenshot', { width: 960, height: 540 });
+        const img = result?.content?.find(c => c.type === 'image');
+        if (img) {
+            const el = document.getElementById('liveImg');
+            if (el) el.src = 'data:' + (img.mimeType || 'image/png') + ';base64,' + img.data;
+            return true;
+        }
+    } catch (_) {}
+    return false;
+}
+
+function startLive() {
+    stopLive();
+    currentMode = 'live';
+    setAllInactive();
+    useFetchFrames = true;
+
+    async function poll() {
+        if (currentMode !== 'live') return;
+        let ok = false;
+        if (useFetchFrames) {
+            ok = await fetchFrame();
+            if (!ok) useFetchFrames = false;
+        }
+        if (!useFetchFrames) {
+            ok = await fetchFrameViaBridge();
+        }
+        // Sequential polling — wait for frame before scheduling next
+        if (currentMode === 'live') {
+            liveTimer = setTimeout(poll, useFetchFrames ? 500 : 2000);
+        }
+    }
+    poll();
+    setInfo('Click, scroll, and type directly on the QGIS desktop above');
+    updateContext('User is interacting with QGIS desktop.');
+}
+
+function stopLive() {
+    if (liveTimer) { clearTimeout(liveTimer); liveTimer = null; }
+    if (lastBlobUrl) { URL.revokeObjectURL(lastBlobUrl); lastBlobUrl = null; }
+}
+
+// Request a fresh frame after user interaction
+function refreshAfterInput(delayMs) {
+    setTimeout(async () => {
+        if (currentMode !== 'live') return;
+        if (useFetchFrames) await fetchFrame();
+        else await fetchFrameViaBridge();
+    }, delayMs || 150);
+}
+
+// ── X11 Input (mouse/keyboard -> xdotool via REST) ───────────
+function getDisplayCoords(e) {
+    const img = document.getElementById('liveImg');
+    if (!img) return null;
+    const rect = img.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * DISPLAY_W);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * DISPLAY_H);
+    return {
+        x: Math.max(0, Math.min(x, DISPLAY_W)),
+        y: Math.max(0, Math.min(y, DISPLAY_H))
+    };
+}
+
+// ── Input: try REST fetch, fallback to MCP tools ─────────────
+let useCallToolInput = false;
+
+function sendInput(data) {
+    if (useCallToolInput) {
+        sendInputViaBridge(data);
+        return;
+    }
+    fetch(INPUT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    }).catch(() => {
+        useCallToolInput = true;
+        sendInputViaBridge(data);
+    });
+}
+
+function sendInputViaBridge(data) {
+    const t = data.type;
+    const btn = data.button === 3 ? 'right' : (data.button === 2 ? 'middle' : 'left');
+    if (t === 'mousedown') {
+        // Store for drag — actual click sent on mouseup
+        return;
+    }
+    if (t === 'mouseup') {
+        if (_dragStart && (Math.abs(data.x - _dragStart.x) > 5 || Math.abs(data.y - _dragStart.y) > 5)) {
+            callTool('mouse_drag', { start_x: _dragStart.x, start_y: _dragStart.y, end_x: data.x, end_y: data.y, button: btn }).catch(() => {});
+        } else {
+            callTool('mouse_click', { x: data.x, y: data.y, button: btn }).catch(() => {});
+        }
+        _dragStart = null;
+        return;
+    }
+    if (t === 'mousemove') return; // Can't do real-time moves via MCP
+    if (t === 'dblclick') {
+        callTool('mouse_click', { x: data.x, y: data.y, button: btn, double_click: true }).catch(() => {});
+        return;
+    }
+    if (t === 'scroll') {
+        callTool('mouse_scroll', { x: data.x, y: data.y, direction: data.direction, clicks: data.clicks || 3 }).catch(() => {});
+        return;
+    }
+    if (t === 'key') {
+        callTool('key_press', { key: data.key }).catch(() => {});
+        return;
+    }
+    if (t === 'type') {
+        callTool('key_press', { text: data.text }).catch(() => {});
+        return;
+    }
+}
+
+let _dragStart = null;
+
+function setupInteraction() {
+    const wrapper = document.getElementById('canvasWrapper');
+    let isMouseDown = false;
+    let lastMoveTime = 0;
+
+    // ── Mouse ────────────────────────────────────────────────
+    wrapper.addEventListener('mousedown', (e) => {
+        if (currentMode !== 'live') return;
+        const coords = getDisplayCoords(e);
+        if (!coords) return;
+        e.preventDefault();
+        wrapper.focus();
+        isMouseDown = true;
+        _dragStart = coords;
+        sendInput({ type: 'mousedown', ...coords, button: e.button + 1 });
+    });
+
+    wrapper.addEventListener('mouseup', (e) => {
+        if (!isMouseDown) return;
+        const coords = getDisplayCoords(e);
+        if (!coords) return;
+        e.preventDefault();
+        isMouseDown = false;
+        sendInput({ type: 'mouseup', ...coords, button: e.button + 1 });
+        refreshAfterInput(150);
+    });
+
+    wrapper.addEventListener('mousemove', (e) => {
+        if (!isMouseDown || currentMode !== 'live') return;
+        const now = Date.now();
+        if (now - lastMoveTime < 50) return;
+        lastMoveTime = now;
+        const coords = getDisplayCoords(e);
+        if (!coords) return;
+        sendInput({ type: 'mousemove', ...coords });
+    });
+
+    wrapper.addEventListener('dblclick', (e) => {
+        if (currentMode !== 'live') return;
+        const coords = getDisplayCoords(e);
+        if (!coords) return;
+        e.preventDefault();
+        sendInput({ type: 'dblclick', ...coords });
+        refreshAfterInput(200);
+    });
+
+    wrapper.addEventListener('wheel', (e) => {
+        if (currentMode !== 'live') return;
+        const coords = getDisplayCoords(e);
+        if (!coords) return;
+        e.preventDefault();
+        const direction = e.deltaY > 0 ? 'down' : 'up';
+        sendInput({ type: 'scroll', ...coords, direction, clicks: 3 });
+        refreshAfterInput(300);
+    }, { passive: false });
+
+    wrapper.addEventListener('contextmenu', (e) => {
+        if (currentMode === 'live') e.preventDefault();
+    });
+
+    // ── Keyboard ─────────────────────────────────────────────
+    const KEY_MAP = {
+        'Enter': 'Return', 'Backspace': 'BackSpace', 'Tab': 'Tab',
+        'Escape': 'Escape', 'Delete': 'Delete', 'Insert': 'Insert',
+        'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
+        'Home': 'Home', 'End': 'End', 'PageUp': 'Prior', 'PageDown': 'Next',
+        ' ': 'space',
+        'F1':'F1','F2':'F2','F3':'F3','F4':'F4','F5':'F5','F6':'F6',
+        'F7':'F7','F8':'F8','F9':'F9','F10':'F10','F11':'F11','F12':'F12',
+    };
+
+    wrapper.addEventListener('keydown', (e) => {
+        if (currentMode !== 'live') return;
+        if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) return;
+        e.preventDefault();
+
+        let mods = [];
+        if (e.ctrlKey) mods.push('ctrl');
+        if (e.altKey) mods.push('alt');
+        if (e.shiftKey && (e.key.length > 1 || e.ctrlKey || e.altKey)) mods.push('shift');
+
+        let key = KEY_MAP[e.key] || null;
+
+        if (!key) {
+            if (e.key.length === 1 && !e.ctrlKey && !e.altKey) {
+                sendInput({ type: 'type', text: e.key });
+                refreshAfterInput(150);
+                return;
+            }
+            key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        }
+
+        const combo = mods.length > 0 ? mods.join('+') + '+' + key : key;
+        sendInput({ type: 'key', key: combo });
+        refreshAfterInput(200);
+    });
+
+    // Auto-focus on click
+    wrapper.addEventListener('click', () => wrapper.focus());
+}
+
+// ── Pop-out VNC ──────────────────────────────────────────────
+function openVncPopout() {
+    const url = VNC_URL;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            setInfo('URL copied! Paste in browser: ' + url);
+        }).catch(() => {
+            setInfo('Open in browser: ' + url);
+        });
+    } else {
+        setInfo('Open in browser: ' + url);
+    }
+}
+
+// ── Drag-and-drop upload ─────────────────────────────────────
+function setupDragDrop() {
+    const body = document.body;
+    const overlay = document.getElementById('dropOverlay');
+    let dragCounter = 0;
+
+    body.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (e.dataTransfer.types.includes('Files')) {
+            overlay.classList.add('visible');
+        }
+    });
+
+    body.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            overlay.classList.remove('visible');
+        }
+    });
+
+    body.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+
+    body.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('visible');
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length === 0) return;
+        await uploadFiles(files);
+    });
+}
+
+// ── Screenshot ──────────────────────────────────────────────
+async function doScreenshot() {
+    stopLive();
+    setAllInactive();
+    document.getElementById('btnScreenshot').classList.add('active');
+    currentMode = 'screenshot';
+    setInfo('Capturing...');
+    try {
+        const result = await callTool('get_screenshot', { width: 1920, height: 1080 });
+        const img = result?.content?.find(c => c.type === 'image');
+        if (img) {
+            document.getElementById('liveImg').src =
+                'data:' + (img.mimeType || 'image/png') + ';base64,' + img.data;
+            setInfo('Screenshot captured — click on the image to return to live mode');
+            updateContext('QGIS desktop screenshot.', img.data);
+        } else {
+            const txt = result?.content?.find(c => c.type === 'text');
+            setInfo(txt?.text || 'No image');
+        }
+    } catch (e) { setInfo('Failed: ' + e.message); }
+}
+
+// ── Project Info ────────────────────────────────────────────
+async function doProjectInfo() {
+    stopLive();
+    setAllInactive();
+    document.getElementById('btnInfo').classList.add('active');
+    currentMode = 'info';
+    setInfo('Loading...');
+    try {
+        const result = await callTool('get_project_info', {});
+        const txt = result?.content?.find(c => c.type === 'text');
+        if (txt) {
+            let info; try { info = JSON.parse(txt.text); } catch { info = txt.text; }
+            document.getElementById('canvasWrapper').innerHTML =
+                '<pre>' + esc(typeof info === 'string' ? info : JSON.stringify(info, null, 2)) + '</pre>' +
+                '<div class="drop-overlay" id="dropOverlay"><span>Drop files to upload</span></div>';
+            setInfo('Project info — click image area to return to live mode');
+            updateContext('Project info: ' + (typeof info === 'string' ? info : JSON.stringify(info)));
+        }
+    } catch (e) { setInfo('Failed: ' + e.message); }
+}
+
+// ── File management ─────────────────────────────────────────
+function doUpload() { document.getElementById('fileInput').click(); }
+
+async function uploadFiles(files) {
+    const total = files.length;
+    let uploaded = 0;
+    for (const file of files) {
+        setInfo('Uploading ' + file.name + (total > 1 ? ' (' + (uploaded + 1) + '/' + total + ')' : '') + '...');
+        try {
+            const formData = new FormData();
+            formData.append('file', file, file.name);
+            const resp = await fetch(API_BASE + '/api/upload', { method: 'POST', body: formData });
+            const info = await resp.json();
+            if (info.success) {
+                uploaded++;
+                updateContext('File uploaded: ' + file.name);
+            } else {
+                setInfo('Upload failed: ' + file.name + ' — ' + (info.error || 'unknown error'));
+            }
+        } catch (err) {
+            setInfo('Upload failed: ' + file.name + ' — ' + err.message);
+        }
+    }
+    if (uploaded > 0) {
+        setInfo('Uploaded ' + uploaded + ' file(s)');
+        if (filePanelOpen) doListFiles();
+    }
+}
+
+document.getElementById('fileInput').addEventListener('change', async function(e) {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    await uploadFiles(files);
+    e.target.value = '';
+});
+
+function toggleFiles() {
+    const panel = document.getElementById('filePanel');
+    if (filePanelOpen) {
+        panel.classList.remove('visible');
+        filePanelOpen = false;
+    } else {
+        doListFiles();
+    }
+}
+
+async function doListFiles() {
+    setInfo('Loading files...');
+    try {
+        const result = await callTool('list_files', {});
+        let files = [];
+        if (result?.content) {
+            for (const c of result.content) {
+                if (c.type === 'text') {
+                    try { const p = JSON.parse(c.text); if (p.files) { files = p.files; break; } } catch (_) {}
+                }
+            }
+        }
+
+        const panel = document.getElementById('filePanel');
+        const list = document.getElementById('fileList');
+        const countEl = document.getElementById('fileCount');
+
+        countEl.textContent = '(' + files.length + ')';
+
+        if (files.length === 0) {
+            list.innerHTML = '<div class="file-empty">No files — upload or export to get started</div>';
+        } else {
+            list.innerHTML = files.map(f => renderFileItem(f, true)).join('');
+        }
+
+        panel.classList.add('visible');
+        filePanelOpen = true;
+        setInfo(files.length + ' file(s)');
+    } catch (e) { setInfo('Failed to list files: ' + e.message); }
+}
+
+function renderFileItem(f, canDelete) {
+    const icon = fileIcon(f.name);
+    const modDate = f.modified ? new Date(f.modified * 1000).toLocaleDateString() : '';
+    const safeName = esc(f.name).replace(/'/g, "\\'");
+    const qtype = getQgisFileType(f.name);
+    const clickFn = qtype ? 'doLoadFile' : 'doCopyFileUrl';
+    const nameTitle = qtype ? 'Click to load into QGIS' : 'Click to copy download URL';
+    const deleteBtn = canDelete
+        ? '<button class="del" onclick="doDeleteFile(\'' + safeName + '\')" title="Delete">\u2716</button>'
+        : '';
+    return '<div class="file-item">' +
+        '<span class="file-icon">' + icon + '</span>' +
+        '<span class="file-name" onclick="' + clickFn + '(\'' + safeName + '\')" title="' + nameTitle + '">' + esc(f.name) + '</span>' +
+        '<span class="file-meta">' + formatSize(f.size) + (modDate ? ' &middot; ' + modDate : '') + '</span>' +
+        '<span class="file-actions">' +
+            '<button class="dl" onclick="doCopyFileUrl(\'' + safeName + '\')" title="Copy download URL">\u2B07</button>' +
+            deleteBtn +
+        '</span>' +
+        '</div>';
+}
+
+async function doLoadFile(name) {
+    const ftype = getQgisFileType(name);
+    if (!ftype) { doCopyFileUrl(name); return; }
+    const path = '/data/' + name;
+    setInfo('Loading ' + name + ' into QGIS...');
+    try {
+        let result;
+        if (ftype === 'project') {
+            result = await callTool('open_project', { path: path });
+        } else {
+            const baseName = name.replace(/\.[^.]+$/, '');
+            result = await callTool('add_layer', { uri: path, name: baseName, layer_type: ftype });
+        }
+        const txt = result?.content?.find(c => c.type === 'text');
+        const text = txt?.text || '';
+        if (text.toLowerCase().includes('error')) {
+            setInfo('Load failed: ' + text.substring(0, 120));
+        } else {
+            setInfo('Loaded into QGIS: ' + name);
+            updateContext('File loaded into QGIS project: ' + name);
+            refreshAfterInput(500);
+        }
+    } catch (e) {
+        setInfo('Load failed: ' + e.message);
+    }
+}
+
+function doCopyFileUrl(name) {
+    const url = API_BASE + '/api/files/' + encodeURIComponent(name);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            setInfo('URL copied! Paste in browser: ' + name);
+        }).catch(() => {
+            setInfo('Download: ' + url);
+        });
+    } else {
+        setInfo('Download: ' + url);
+    }
+}
+
+let pendingDelete = null;
+
+function doDeleteFile(name) {
+    if (pendingDelete === name) {
+        pendingDelete = null;
+        executeDelete(name);
+    } else {
+        pendingDelete = name;
+        setInfo('Click delete again to confirm: ' + name);
+        setTimeout(() => { if (pendingDelete === name) { pendingDelete = null; setInfo('Delete cancelled'); } }, 3000);
+    }
+}
+
+async function executeDelete(name) {
+    setInfo('Deleting ' + name + '...');
+    try {
+        const result = await callTool('delete_file', { path: name });
+        const txt = result?.content?.find(c => c.type === 'text');
+        const text = txt?.text || '';
+        if (text.toLowerCase().includes('error')) {
+            setInfo('Delete failed: ' + text);
+        } else {
+            setInfo('Deleted: ' + name);
+            updateContext('File deleted: ' + name);
+            doListFiles();
+        }
+    } catch (err) {
+        setInfo('Delete failed: ' + err.message);
+    }
+}
+
+// ── Return to live mode on canvas click (when in screenshot/info mode) ──
+document.getElementById('canvasWrapper').addEventListener('click', function() {
+    if (currentMode !== 'live') {
+        // Restore canvas structure if it was replaced by <pre>
+        const wrapper = document.getElementById('canvasWrapper');
+        if (!document.getElementById('liveImg')) {
+            wrapper.innerHTML = '<img id="liveImg" alt="QGIS Desktop" style="width:100%;display:block">' +
+                '<div class="drop-overlay" id="dropOverlay"><span>Drop files to upload</span></div>';
+        }
+        startLive();
+    }
+});
+
+// ── Helpers ──────────────────────────────────────────────────
+function setAllInactive() {
+    ['btnScreenshot', 'btnInfo'].forEach(b => {
+        document.getElementById(b).classList.remove('active');
+    });
+}
+function setInfo(t) { document.getElementById('infoBar').textContent = t; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+// ── Init ─────────────────────────────────────────────────────
+setupInteraction();
+setupDragDrop();
+initMcpApp();
+</script>
+</body>
+</html>
