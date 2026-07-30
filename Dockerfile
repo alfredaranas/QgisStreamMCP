@@ -145,6 +145,14 @@ RUN cp /app/src/qgis_bridge.py \
 # 8100: MCP Server (Streamable HTTP)
 EXPOSE 6080 8080 8081 8100
 
+# ── Enable the GRASS processing provider ──────────────────────────────
+# qgis-plugin-grass is already installed above, but grassprovider is not
+# enabled by default, so qgis_process exposes none of its algorithms.
+# Enabling it takes the image from 388 to 695 available algorithms.
+RUN mkdir -p /root/.local/share/QGIS/QGIS3/profiles/default/QGIS && \
+    printf '\n[PythonPlugins]\ngrassprovider=true\n' \
+      >> /root/.local/share/QGIS/QGIS3/profiles/default/QGIS/QGIS3.ini
+
 # ── Healthcheck ──────────────────────────────────────────────────
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 \
     CMD curl -sf http://localhost:8080/health && curl -sf http://localhost:8100/health || exit 1
