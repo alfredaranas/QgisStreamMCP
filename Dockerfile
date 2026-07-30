@@ -121,7 +121,10 @@ COPY main_mcp.py /app/
 COPY qgis_app.html /app/
 COPY maximize_qgis.sh /app/
 COPY datasources.json /app/
-COPY setup_qgis_connections.py /app/
+# Optional: glob form so a clean clone still builds. setup_qgis_connections.py
+# is listed in .gitignore, so it is absent from any fresh checkout; entrypoint.sh
+# already treats it as non-fatal at runtime.
+COPY setup_qgis_connection[s].py /app/
 COPY src/ /app/src/
 COPY skills/ /app/skills/
 COPY templates/ /app/templates/
