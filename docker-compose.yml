@@ -30,8 +30,8 @@ services:
     ports:
       - "${MCP_PORT:-8100}:8100"    # MCP Server
       - "${QGIS_VNC_PORT:-6080}:6080"  # noVNC (QGIS in browser)
-      - "8080:8080"                  # REST API
-      - "8081:8081"                  # MJPEG stream
+      - "8113:8080"                  # REST API
+      - "8135:8081"                  # MJPEG stream
     environment:
       # Uncomment with deploy block above for GPU support
       # - NVIDIA_VISIBLE_DEVICES=all
@@ -48,6 +48,8 @@ services:
       - QGIS_PROJECT=${QGIS_PROJECT:-}
     volumes:
       - ./data:/data
+      # RAID6 bulk archive (sda2, 5.5T free, fstab nofail, allow_other)
+      - "/media/alfredaranas/NewVolume/jalbtcx:/archive"
       # Dev: mount source for live editing (restart container to apply)
       - ./main_mcp.py:/app/main_mcp.py:ro
       - ./qgis_app.html:/app/qgis_app.html:ro

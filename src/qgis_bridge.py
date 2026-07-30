@@ -29,6 +29,7 @@ from urllib.parse import quote
 # PyQGIS imports (available because we run inside QGIS)
 from qgis.core import (
     QgsProject, QgsVectorLayer, QgsRasterLayer, QgsCoordinateReferenceSystem,
+    QgsPointCloudLayer,
     QgsFeatureRequest, QgsRectangle, QgsMapSettings, QgsMapRendererParallelJob,
     QgsLayoutExporter, QgsApplication, QgsExpression, QgsField, QgsFields,
     QgsCoordinateTransform, QgsPointXY, Qgis, QgsWkbTypes,
@@ -493,12 +494,28 @@ class QGISBridge:
             result["width"] = layer.width()
             result["height"] = layer.height()
             result["band_count"] = layer.bandCount()
+        elif isinstance(layer, QgsPointCloudLayer):
+            try:
+                result["point_count"] = layer.pointCount()
+            except Exception:
+                pass
         return result
+
+    # QGIS has native copc/ept/vpc point cloud providers (verified via
+    # QgsProviderRegistry 2026-07-29). Raw .las/.laz still needs converting to
+    # COPC first via the pdal sidecar container - PDAL is not in this image
+    # because the only build requires GDAL 3.11 vs QGIS 3.44's 3.8.
+    POINT_CLOUD_PROVIDERS = {"copc", "ept", "vpc", "pdal"}
 
     def _action_add_vector_layer(self, params: dict) -> dict:
         uri = params.get("uri", "")
         name = params.get("name", "layer")
         provider = params.get("provider", "ogr")  # ogr, WFS, postgres, memory
+        if provider in self.POINT_CLOUD_PROVIDERS:
+            layer = QgsPointCloudLayer(uri, name, provider)
+            if not layer.isValid():
+                return {"error": f"Invalid point cloud layer: {uri}", "provider": provider}
+            return self._finalize_add_layer(layer)
         layer = QgsVectorLayer(uri, name, provider)
         if not layer.isValid():
             return {"error": f"Invalid layer: {uri}", "provider": provider}

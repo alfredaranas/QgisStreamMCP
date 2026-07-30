@@ -142,6 +142,30 @@ RUN cp /app/src/qgis_bridge.py \
 # 8100: MCP Server (Streamable HTTP)
 EXPOSE 6080 8080 8081 8100
 
+# ── Python analysis stack ─────────────────────────────────────
+# apt (not pip) - must match system python3.12 and must NOT disturb the
+# numpy/scipy that QGIS's compiled bindings link against.
+# PDAL is deliberately NOT installed here: the only build available (ubuntugis
+# PPA) requires libgdal37 / GDAL 3.11.4, but QGIS 3.44 in this image is built
+# against GDAL 3.8.4. Forcing that upgrade risks breaking QGIS. QGIS already
+# has native copc/ept/vpc providers, so LAS->COPC conversion runs in a
+# SEPARATE pdal container and QGIS just reads the COPC. See
+# docs/plans/QGIS_MCP_IMAGE_PLAN.md (2026-07-29).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-pandas python3-geopandas python3-shapely python3-fiona \
+        python3-rasterio python3-h5py python3-netcdf4 \
+    && pip3 install --no-cache-dir --break-system-packages 'laspy[lazrs]' \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── Enable GRASS processing provider ──────────────────────────────────
+# grassprovider ships in qgis-plugin-grass but is NOT enabled by default.
+# Without this the image carries GRASS 8.3 and exposes ZERO of its ~307
+# algorithms to qgis_process. Verified 2026-07-29: 388 -> 695 algorithms.
+# GISBASE is NOT required; the provider locates GRASS on its own.
+RUN mkdir -p /root/.local/share/QGIS/QGIS3/profiles/default/QGIS && \
+    printf '\n[PythonPlugins]\ngrassprovider=true\n' \
+      >> /root/.local/share/QGIS/QGIS3/profiles/default/QGIS/QGIS3.ini
+
 # ── Healthcheck ──────────────────────────────────────────────────
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 \
     CMD curl -sf http://localhost:8080/health && curl -sf http://localhost:8100/health || exit 1
