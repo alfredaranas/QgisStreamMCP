@@ -142,3 +142,5 @@ Regression guard after any rebuild: algorithm count should still be **695** and
 - Nothing pages if the container or QGIS session dies.
 - Reboot survival never observed (`restart: unless-stopped` is set; RAID6 mount is
   fstab `nofail`).
+
+Security hardening (2026-07-31): MCP remains at /mcp on 8130; REST callers must send Authorization: Bearer QGIS_API_TOKEN from their secret environment. execute_python and /api/command execute_python require QGIS_ELEVATED_TOKEN. noVNC remains /vnc.html and uses HTTP Basic plus VNC password.

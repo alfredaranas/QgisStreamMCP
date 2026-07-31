@@ -11,22 +11,67 @@ Provides:
 Runs on port 8080.
 """
 
+import hashlib
 import json
+import logging
+import os
 import re
+import secrets
 import socket
 import subprocess
-import os
 import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 
 SOCKET_PATH = "/tmp/qgis_bridge.sock"
 SOCKET_TIMEOUT = 30  # seconds
+MAX_REQUEST_BYTES = 2 * 1024 * 1024
+MAX_EXECUTE_BYTES = 256 * 1024
+MAX_EXECUTE_TIMEOUT = 300
+API_TOKEN = os.environ.get("QGIS_API_TOKEN", "").strip()
+ELEVATED_TOKEN = os.environ.get("QGIS_ELEVATED_TOKEN", API_TOKEN).strip()
+if not API_TOKEN or not ELEVATED_TOKEN:
+    raise RuntimeError("QGIS_API_TOKEN and QGIS_ELEVATED_TOKEN must be set")
+
+_audit = logging.getLogger("qgis.audit")
+_audit.setLevel(logging.INFO)
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter("AUDIT %(message)s"))
+_audit.addHandler(_handler)
+
+
+class SecurityMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        started = time.monotonic()
+        status = 500
+        try:
+            if request.headers.get("content-length") and int(request.headers["content-length"]) > MAX_REQUEST_BYTES:
+                status = 413
+                return JSONResponse(status_code=status, content={"detail": "request too large"})
+            if request.url.path == "/health" and request.client and request.client.host not in {"127.0.0.1", "::1"}:
+                status = 401
+                return JSONResponse(status_code=status, content={"detail": "health is localhost-only"})
+            if request.url.path.startswith("/api/"):
+                supplied = request.headers.get("authorization", "")
+                token = supplied[7:].strip() if supplied.startswith("Bearer ") else ""
+                if not token or not (secrets.compare_digest(token, API_TOKEN) or secrets.compare_digest(token, ELEVATED_TOKEN)):
+                    status = 401
+                    return JSONResponse(status_code=status, content={"detail": "missing or invalid bearer token"})
+                request.state.elevated = secrets.compare_digest(token, ELEVATED_TOKEN)
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            _audit.info("caller=%s endpoint=%s duration_ms=%d status=%d",
+                        request.client.host if request.client else "unknown",
+                        request.url.path, int((time.monotonic() - started) * 1000), status)
+
 
 app = FastAPI(
     title="QgisStreamMCP API",
@@ -34,6 +79,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.add_middleware(SecurityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -95,12 +141,14 @@ async def health():
 # ── Generic command endpoint ──────────────────────────────────────
 
 @app.post("/api/command")
-async def command(body: dict):
+async def command(body: dict, request: Request):
     """Send any command to QGIS bridge."""
     action = body.get("action", "")
     params = body.get("params", {})
     if not action:
         raise HTTPException(400, "Missing 'action' field")
+    if action == "execute_python" and not getattr(request.state, "elevated", False):
+        raise HTTPException(403, "elevated bearer token required for execute_python")
     return send_command(action, params)
 
 
@@ -122,11 +170,18 @@ async def screenshot(width: int = 800, height: int = 600, format: str = "png"):
 
 
 @app.post("/api/execute")
-async def execute_python(body: dict):
+async def execute_python(body: dict, request: Request):
+    if not getattr(request.state, "elevated", False):
+        raise HTTPException(403, "elevated bearer token required for execute_python")
     code = body.get("code", "")
     if not code:
         raise HTTPException(400, "Missing 'code' field")
-    user_timeout = body.get("timeout", 30)
+    if len(code.encode()) > MAX_EXECUTE_BYTES:
+        raise HTTPException(413, "code exceeds 256KB limit")
+    try:
+        user_timeout = max(1, min(int(body.get("timeout", 30)), MAX_EXECUTE_TIMEOUT))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "invalid timeout")
     return send_command("execute_python",
                         {"code": code, "timeout": user_timeout},
                         timeout=user_timeout + 30)

@@ -59,3 +59,5 @@ setup_qgis_connections.py
 # Scratch scripts
 gimp_*.py
 gimp_*.sh
+
+secrets/qgis_vnc.passwd
