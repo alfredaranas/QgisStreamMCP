@@ -169,7 +169,8 @@ RUN pip3 install --break-system-packages --no-cache-dir \
 # fully shadows pip's; sys.path/PYTHONPATH reordering cannot fix it.
 # pip's copy provides axes_grid1 + axisartist + mplot3d, so removing the
 # apt directory alone restores Axes3D and loses nothing.
-RUN rm -rf /usr/lib/python3/dist-packages/mpl_toolkits
+RUN rm -rf /usr/lib/python3/dist-packages/mpl_toolkits \
+    /usr/lib/python3/dist-packages/matplotlib-*-nspkg.pth
 
 # ── A1: python-pdal bindings (NON-FATAL).
 # python-pdal>=3.4 needs PDAL>=2.7; PPA ships 2.6.2, so try 3.3.x then 3.2.x.

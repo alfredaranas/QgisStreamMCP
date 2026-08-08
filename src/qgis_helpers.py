@@ -572,8 +572,16 @@ def qgis_diag_dump():
         info["providers"] = list(QgsProviderRegistry.instance().providerList())
         info["processing_providers"] = []
         try:
-            from processing.core.Processing import Processing
-            reg = Processing.instance().providerRegistry()
+            # QgsApplication.processingRegistry() is authoritative and does not
+            # require the Processing framework to be initialised in this process.
+            # Processing.instance().providerRegistry() returns empty when it is
+            # not, producing a false "Processing=DEGRADED" (2026-08-08).
+            try:
+                reg = QgsApplication.processingRegistry()
+                _ = reg.providers()
+            except Exception:
+                from processing.core.Processing import Processing
+                reg = Processing.instance().providerRegistry()
             for p in reg.providers():
                 info["processing_providers"].append({
                     "id": p.id(),
