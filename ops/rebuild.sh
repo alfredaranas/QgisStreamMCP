@@ -7,7 +7,12 @@ PHASE="${1:-1}"
 TS=$(date +%Y%m%d-%H%M%S)
 LOG=~/logs/qgis_rebuild_${PHASE}_${TS}.log
 mkdir -p ~/logs
-ROLLBACK=qgis-streammcp:rollback-pre-rebuild-20260806
+# Roll back to the LAST KNOWN-GOOD image, not the original snapshot.
+# 2026-08-08: a failed build rolled back past the PDAL work and silently
+# removed pdal/gdal 3.11 from the running container. Override with env.
+ROLLBACK="${ROLLBACK_IMAGE:-qgis-streammcp:last-known-good}"
+docker image inspect "$ROLLBACK" >/dev/null 2>&1 || \
+  ROLLBACK=qgis-streammcp:rollback-pre-rebuild-20260806
 NEW=qgis-streammcp:build-${TS}
 
 exec > >(tee -a "$LOG") 2>&1
