@@ -163,8 +163,13 @@ RUN pip3 install --break-system-packages --no-cache-dir \
 
 # apt python3-matplotlib ships a stale mpl_toolkits that shadows pip's and
 # breaks Axes3D (mpl_toolkits is a namespace pkg; apt's copy wins). Purge it.
-RUN apt-get purge -y python3-matplotlib 2>/dev/null || true; \
-    rm -rf /usr/lib/python3/dist-packages/mpl_toolkits
+# Do NOT purge python3-matplotlib -- QGIS depends on it and apt drags QGIS
+# components out with it (2026-08-08: container never became healthy).
+# apt's mpl_toolkits has an __init__.py, so it is a REGULAR package that
+# fully shadows pip's; sys.path/PYTHONPATH reordering cannot fix it.
+# pip's copy provides axes_grid1 + axisartist + mplot3d, so removing the
+# apt directory alone restores Axes3D and loses nothing.
+RUN rm -rf /usr/lib/python3/dist-packages/mpl_toolkits
 
 # ── A1: python-pdal bindings (NON-FATAL).
 # python-pdal>=3.4 needs PDAL>=2.7; PPA ships 2.6.2, so try 3.3.x then 3.2.x.
