@@ -1,0 +1,487 @@
+[
+    {
+        "Id": "f5188f7fbab53b91815b414223d6b24688455438014da804eab6d8cfdd86f012",
+        "Created": "2026-07-29T21:24:32.856174335Z",
+        "Path": "/app/entrypoint.sh",
+        "Args": [],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 2163169,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-30T09:48:17.172631039Z",
+            "FinishedAt": "2026-07-30T09:48:16.810411904Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-07-31T06:37:48.814675029-05:00",
+                        "End": "2026-07-31T06:37:48.893095971-05:00",
+                        "ExitCode": 0,
+                        "Output": "{\"api\":\"ok\",\"qgis\":{\"status\":\"ok\",\"qgis_version\":\"3.44.12-Solothurn\",\"project\":\"(no project)\",\"layer_count\":1,\"crs\":\"EPSG:26918\",\"uptime_seconds\":92967,\"processing_available\":true}}"
+                    },
+                    {
+                        "Start": "2026-07-31T06:38:18.895366563-05:00",
+                        "End": "2026-07-31T06:38:18.966627183-05:00",
+                        "ExitCode": 0,
+                        "Output": "{\"api\":\"ok\",\"qgis\":{\"status\":\"ok\",\"qgis_version\":\"3.44.12-Solothurn\",\"project\":\"(no project)\",\"layer_count\":1,\"crs\":\"EPSG:26918\",\"uptime_seconds\":92997,\"processing_available\":true}}"
+                    },
+                    {
+                        "Start": "2026-07-31T06:38:48.968127775-05:00",
+                        "End": "2026-07-31T06:38:49.043305332-05:00",
+                        "ExitCode": 0,
+                        "Output": "{\"api\":\"ok\",\"qgis\":{\"status\":\"ok\",\"qgis_version\":\"3.44.12-Solothurn\",\"project\":\"(no project)\",\"layer_count\":1,\"crs\":\"EPSG:26918\",\"uptime_seconds\":93027,\"processing_available\":true}}"
+                    },
+                    {
+                        "Start": "2026-07-31T06:39:19.044746099-05:00",
+                        "End": "2026-07-31T06:39:19.117963317-05:00",
+                        "ExitCode": 0,
+                        "Output": "{\"api\":\"ok\",\"qgis\":{\"status\":\"ok\",\"qgis_version\":\"3.44.12-Solothurn\",\"project\":\"(no project)\",\"layer_count\":1,\"crs\":\"EPSG:26918\",\"uptime_seconds\":93057,\"processing_available\":true}}"
+                    },
+                    {
+                        "Start": "2026-07-31T06:39:49.1204335-05:00",
+                        "End": "2026-07-31T06:39:49.220818577-05:00",
+                        "ExitCode": 0,
+                        "Output": "{\"api\":\"ok\",\"qgis\":{\"status\":\"ok\",\"qgis_version\":\"3.44.12-Solothurn\",\"project\":\"(no project)\",\"layer_count\":1,\"crs\":\"EPSG:26918\",\"uptime_seconds\":93087,\"processing_available\":true}}"
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:a76823dd4e98c43bcb7084867b16093bae106c2f9a23a8282b47505125249150",
+        "ResolvConfPath": "/var/lib/docker/containers/f5188f7fbab53b91815b414223d6b24688455438014da804eab6d8cfdd86f012/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/f5188f7fbab53b91815b414223d6b24688455438014da804eab6d8cfdd86f012/hostname",
+        "HostsPath": "/var/lib/docker/containers/f5188f7fbab53b91815b414223d6b24688455438014da804eab6d8cfdd86f012/hosts",
+        "LogPath": "/var/lib/docker/containers/f5188f7fbab53b91815b414223d6b24688455438014da804eab6d8cfdd86f012/f5188f7fbab53b91815b414223d6b24688455438014da804eab6d8cfdd86f012-json.log",
+        "Name": "/qgisstreammcp",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": [
+                "/home/alfredaranas/Projects/qgis-streammcp/data:/data:rw",
+                "/media/alfredaranas/NewVolume/jalbtcx:/archive:rw",
+                "/home/alfredaranas/Projects/qgis-streammcp/main_mcp.py:/app/main_mcp.py:ro",
+                "/home/alfredaranas/Projects/qgis-streammcp/src:/app/src:ro",
+                "/home/alfredaranas/Projects/qgis-streammcp/templates:/app/templates:ro",
+                "/home/alfredaranas/Projects/qgis-streammcp/qgis_app.html:/app/qgis_app.html:ro",
+                "/home/alfredaranas/Projects/qgis-streammcp/datasources.json:/app/datasources.json:ro",
+                "/home/alfredaranas/Projects/qgis-streammcp/setup_qgis_connections.py:/app/setup_qgis_connections.py:ro",
+                "/home/alfredaranas/Projects/qgis-streammcp/skills:/app/skills:ro",
+                "/home/alfredaranas/Projects/qgis-streammcp/recipes:/app/recipes:ro"
+            ],
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "qgis-streammcp_default",
+            "PortBindings": {
+                "6080/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "6080"
+                    }
+                ],
+                "8080/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "8113"
+                    }
+                ],
+                "8081/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "8135"
+                    }
+                ],
+                "8100/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "8130"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [
+                "host.docker.internal:host-gateway"
+            ],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware",
+                "/sys/devices/system/cpu/cpu0/thermal_throttle",
+                "/sys/devices/system/cpu/cpu1/thermal_throttle",
+                "/sys/devices/system/cpu/cpu2/thermal_throttle",
+                "/sys/devices/system/cpu/cpu3/thermal_throttle",
+                "/sys/devices/system/cpu/cpu4/thermal_throttle",
+                "/sys/devices/system/cpu/cpu5/thermal_throttle",
+                "/sys/devices/system/cpu/cpu6/thermal_throttle",
+                "/sys/devices/system/cpu/cpu7/thermal_throttle",
+                "/sys/devices/system/cpu/cpu8/thermal_throttle",
+                "/sys/devices/system/cpu/cpu9/thermal_throttle",
+                "/sys/devices/system/cpu/cpu10/thermal_throttle",
+                "/sys/devices/system/cpu/cpu11/thermal_throttle",
+                "/sys/devices/system/cpu/cpu12/thermal_throttle",
+                "/sys/devices/system/cpu/cpu13/thermal_throttle",
+                "/sys/devices/system/cpu/cpu14/thermal_throttle",
+                "/sys/devices/system/cpu/cpu15/thermal_throttle",
+                "/sys/devices/system/cpu/cpu16/thermal_throttle",
+                "/sys/devices/system/cpu/cpu17/thermal_throttle",
+                "/sys/devices/system/cpu/cpu18/thermal_throttle",
+                "/sys/devices/system/cpu/cpu19/thermal_throttle",
+                "/sys/devices/system/cpu/cpu20/thermal_throttle",
+                "/sys/devices/system/cpu/cpu21/thermal_throttle",
+                "/sys/devices/system/cpu/cpu22/thermal_throttle",
+                "/sys/devices/system/cpu/cpu23/thermal_throttle",
+                "/sys/devices/system/cpu/cpu24/thermal_throttle",
+                "/sys/devices/system/cpu/cpu25/thermal_throttle",
+                "/sys/devices/system/cpu/cpu26/thermal_throttle",
+                "/sys/devices/system/cpu/cpu27/thermal_throttle",
+                "/sys/devices/system/cpu/cpu28/thermal_throttle",
+                "/sys/devices/system/cpu/cpu29/thermal_throttle",
+                "/sys/devices/system/cpu/cpu30/thermal_throttle",
+                "/sys/devices/system/cpu/cpu31/thermal_throttle",
+                "/sys/devices/system/cpu/cpu32/thermal_throttle",
+                "/sys/devices/system/cpu/cpu33/thermal_throttle",
+                "/sys/devices/system/cpu/cpu34/thermal_throttle",
+                "/sys/devices/system/cpu/cpu35/thermal_throttle",
+                "/sys/devices/system/cpu/cpu36/thermal_throttle",
+                "/sys/devices/system/cpu/cpu37/thermal_throttle",
+                "/sys/devices/system/cpu/cpu38/thermal_throttle",
+                "/sys/devices/system/cpu/cpu39/thermal_throttle",
+                "/sys/devices/system/cpu/cpu40/thermal_throttle",
+                "/sys/devices/system/cpu/cpu41/thermal_throttle",
+                "/sys/devices/system/cpu/cpu42/thermal_throttle",
+                "/sys/devices/system/cpu/cpu43/thermal_throttle",
+                "/sys/devices/system/cpu/cpu44/thermal_throttle",
+                "/sys/devices/system/cpu/cpu45/thermal_throttle",
+                "/sys/devices/system/cpu/cpu46/thermal_throttle",
+                "/sys/devices/system/cpu/cpu47/thermal_throttle"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/data",
+                "Destination": "/data",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/media/alfredaranas/NewVolume/jalbtcx",
+                "Destination": "/archive",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/main_mcp.py",
+                "Destination": "/app/main_mcp.py",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/templates",
+                "Destination": "/app/templates",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/qgis_app.html",
+                "Destination": "/app/qgis_app.html",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/setup_qgis_connections.py",
+                "Destination": "/app/setup_qgis_connections.py",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/recipes",
+                "Destination": "/app/recipes",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/src",
+                "Destination": "/app/src",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/datasources.json",
+                "Destination": "/app/datasources.json",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/alfredaranas/Projects/qgis-streammcp/skills",
+                "Destination": "/app/skills",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "f5188f7fbab5",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "6080/tcp": {},
+                "8080/tcp": {},
+                "8081/tcp": {},
+                "8100/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PYTHONUNBUFFERED=1",
+                "QGIS_PROJECT=",
+                "QGIS_RESOLUTION=1920x1080x24",
+                "MOONDREAM_URL=http://host.docker.internal:8001",
+                "MCP_PORT=8100",
+                "SAMGEO3_URL=http://host.docker.internal:8002",
+                "DEPTHPRO_URL=http://host.docker.internal:8003",
+                "VNC_HOST=localhost",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "DEBIAN_FRONTEND=noninteractive",
+                "DISPLAY=:99",
+                "QT_QPA_PLATFORM=xcb",
+                "LP_NUM_THREADS=4",
+                "XDG_SESSION_TYPE=x11",
+                "XDG_RUNTIME_DIR=/run/user/0",
+                "QT_X11_NO_MITSHM=1",
+                "PYTHONDONTWRITEBYTECODE=1"
+            ],
+            "Cmd": null,
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "curl",
+                    "-sf",
+                    "http://localhost:8080/health"
+                ],
+                "Interval": 30000000000,
+                "Timeout": 10000000000,
+                "StartPeriod": 60000000000,
+                "Retries": 3
+            },
+            "Image": "qgis-streammcp-qgisstreammcp",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "/app/entrypoint.sh"
+            ],
+            "Labels": {
+                "com.docker.compose.config-hash": "69af51643f820148d8424c5fcedc1c1089e589f78b538a7b96c0854dee4f24dc",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:a76823dd4e98c43bcb7084867b16093bae106c2f9a23a8282b47505125249150",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "qgis-streammcp",
+                "com.docker.compose.project.config_files": "/home/alfredaranas/Projects/qgis-streammcp/docker-compose.yml",
+                "com.docker.compose.project.working_dir": "/home/alfredaranas/Projects/qgis-streammcp",
+                "com.docker.compose.replace": "qgisstreammcp",
+                "com.docker.compose.service": "qgisstreammcp",
+                "com.docker.compose.version": "5.3.1",
+                "org.opencontainers.image.version": "24.04"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "c1230b46a370316061d0f57f08d04dac04480feba6d3c5bb075c18bcc6148e7e",
+            "SandboxKey": "/var/run/docker/netns/c1230b46a370",
+            "Ports": {
+                "6080/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "6080"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "6080"
+                    }
+                ],
+                "8080/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "8113"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "8113"
+                    }
+                ],
+                "8081/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "8135"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "8135"
+                    }
+                ],
+                "8100/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "8130"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "8130"
+                    }
+                ]
+            },
+            "Networks": {
+                "qgis-streammcp_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "qgisstreammcp",
+                        "qgisstreammcp"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "0b02c20ca6afbfe02df839d1f3b646b6ed6b3d77ea0a1836c836ce2430948e2e",
+                    "EndpointID": "27c61baa205fe131163fb1cabf43b1dca599b71aacab95308ab575b24270219b",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.2",
+                    "MacAddress": "06:00:6f:00:9b:09",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "qgisstreammcp",
+                        "f5188f7fbab5"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:0644b2c0ee292fcd9cf29c9f1bfeb3c111dc5996383149551d42d1568c0f3826",
+            "size": 4847,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

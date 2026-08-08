@@ -11,85 +11,22 @@ Provides:
 Runs on port 8080.
 """
 
-import hashlib
 import json
-import logging
-import os
 import re
-import secrets
 import socket
 import subprocess
+import os
 import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 
 SOCKET_PATH = "/tmp/qgis_bridge.sock"
 SOCKET_TIMEOUT = 30  # seconds
-MAX_REQUEST_BYTES = 2 * 1024 * 1024
-MAX_EXECUTE_BYTES = 256 * 1024
-MAX_EXECUTE_TIMEOUT = 300
-API_TOKEN = os.environ.get("QGIS_API_TOKEN", "").strip()
-ELEVATED_TOKEN = os.environ.get("QGIS_ELEVATED_TOKEN", API_TOKEN).strip()
-if not API_TOKEN or not ELEVATED_TOKEN:
-    raise RuntimeError("QGIS_API_TOKEN and QGIS_ELEVATED_TOKEN must be set")
-
-_audit = logging.getLogger("qgis.audit")
-_audit.setLevel(logging.INFO)
-_audit_handler = logging.StreamHandler()
-_audit_handler.setFormatter(logging.Formatter("AUDIT %(message)s"))
-_audit.addHandler(_audit_handler)
-
-# A6: Persistent audit log for execute_python (rotating JSON). Keeps a
-#     tampered-shielded record of every elevated-tier code execution with
-#     timestamp, code, return shape, exit/exception text — never the secrets
-#     or bearer tokens themselves.
-_AUDIT_LOG_DIR = os.environ.get("QGIS_AUDIT_LOG_DIR", "/var/log/supervisor")
-os.makedirs(_AUDIT_LOG_DIR, exist_ok=True)
-_AUDIT_LOG_PATH = os.path.join(_AUDIT_LOG_DIR, "execute_python_audit.jsonl")
-import logging.handlers as _lh
-_file_handler = _lh.RotatingFileHandler(
-    _AUDIT_LOG_PATH, maxBytes=10 * 1024 * 1024, backupCount=5,
-    encoding="utf-8",
-)
-_file_handler.setFormatter(logging.Formatter("%(message)s"))
-_audit.addHandler(_file_handler)
-
-# B16+B17: persistent "last error" seen by /api/* for /health/full
-_LAST_ERROR = {"ts": None, "endpoint": None, "msg": None}  # type: dict[str, object]  # noqa: E501
-
-
-class SecurityMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        started = time.monotonic()
-        status = 500
-        try:
-            if request.headers.get("content-length") and int(request.headers["content-length"]) > MAX_REQUEST_BYTES:
-                status = 413
-                return JSONResponse(status_code=status, content={"detail": "request too large"})
-            if request.url.path == "/health" and request.client and request.client.host not in {"127.0.0.1", "::1"}:
-                status = 401
-                return JSONResponse(status_code=status, content={"detail": "health is localhost-only"})
-            if request.url.path.startswith("/api/"):
-                supplied = request.headers.get("authorization", "")
-                token = supplied[7:].strip() if supplied.startswith("Bearer ") else ""
-                if not token or not (secrets.compare_digest(token, API_TOKEN) or secrets.compare_digest(token, ELEVATED_TOKEN)):
-                    status = 401
-                    return JSONResponse(status_code=status, content={"detail": "missing or invalid bearer token"})
-                request.state.elevated = secrets.compare_digest(token, ELEVATED_TOKEN)
-            response = await call_next(request)
-            status = response.status_code
-            return response
-        finally:
-            _audit.info("caller=%s endpoint=%s duration_ms=%d status=%d",
-                        request.client.host if request.client else "unknown",
-                        request.url.path, int((time.monotonic() - started) * 1000), status)
-
 
 app = FastAPI(
     title="QgisStreamMCP API",
@@ -97,7 +34,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.add_middleware(SecurityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -156,113 +92,15 @@ async def health():
         )
 
 
-@app.get("/health/full")
-async def health_full():
-    """B16: Comprehensive readiness probe with versions, providers, disk usage,
-    last error. Same auth requirements as /api/* (bearer token).
-    """
-    # Probe runtime via subprocess (avoids crashing the API on missing deps)
-    def _run(cmd):
-        try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            return (r.stdout or r.stderr).strip().split("\n")[0]
-        except Exception as e:
-            return f"error: {e}"
-    gdal_v = _run(["gdalinfo", "--version"])
-    pdal_v = _run(["/usr/bin/pdal", "--version"])
-    qgis_v = _run(["dpkg-query", "-f", "${VERSION}", "-W", "qgis"])
-    grass_v = _run(["dpkg-query", "-f", "${VERSION}", "-W", "grass"])
-    saga_v = _run(["dpkg-query", "-f", "${VERSION}", "-W", "saga"])
-    otb_v = _run(["dpkg-query", "-f", "${VERSION}", "-W", "otb-bin"])
-    # Disk usage
-    try:
-        import shutil
-        data_use = shutil.disk_usage("/data")
-        archive_use = shutil.disk_usage("/archive") if os.path.exists("/archive") else None
-    except Exception:
-        data_use = archive_use = None
-    return {
-        "status": "ok",
-        "image_revision": os.environ.get("IMAGE_REVISION", "unknown"),
-        "versions": {
-            "qgis": qgis_v,
-            "gdal": gdal_v,
-            "pdal": pdal_v,
-            "grass": grass_v,
-            "saga": saga_v,
-            "otb": otb_v,
-        },
-        "disk": {
-            "/data": {
-                "total": data_use.total if data_use else None,
-                "used": data_use.used if data_use else None,
-                "free": data_use.free if data_use else None,
-            },
-            "/archive": {
-                "total": archive_use.total if archive_use else None,
-                "used": archive_use.used if archive_use else None,
-                "free": archive_use.free if archive_use else None,
-            } if archive_use else None,
-        },
-        "last_error": _LAST_ERROR,
-        "audit_log": _AUDIT_LOG_PATH,
-    }
-
-
-# ── Tools / introspection ──────────────────────────────────────────────
-
-@app.get("/api/tools")
-async def list_tools():
-    """B16: Enumerate MCP tools the server exposes (no secrets, no internal logic)."""
-    try:
-        import main_mcp  # noqa: PLC0415
-        return {"tools": getattr(main_mcp, "TOOL_NAMES", []),
-                "count": len(getattr(main_mcp, "TOOL_NAMES", []))}
-    except Exception as e:
-        raise HTTPException(503, f"main_mcp.py not yet importable: {e}")
-
-
-@app.get("/api/logs")
-async def tail_logs(tail: int = 100, which: str = "audit"):
-    """B17: Tail the rotating JSONL audit log. Same bearer auth as /api/*."""
-    if which == "audit":
-        path = _AUDIT_LOG_PATH
-    elif which == "qgis":
-        path = "/var/log/supervisor/qgis.log"
-    elif which == "api":
-        path = "/var/log/supervisor/api.log"
-    elif which == "mcp":
-        path = "/var/log/supervisor/mcp.log"
-    else:
-        raise HTTPException(400, f"unknown 'which' (audit|qgis|api|mcp): {which}")
-    try:
-        # Resolve latest file in case of rotation
-        if not os.path.exists(path) and which == "audit":
-            return {"lines": [], "path": path, "note": "log not yet created"}
-        # Most efficient: use subprocess wc + tail
-        tail_n = max(1, min(int(tail), 1000))
-        proc = subprocess.run(
-            ["tail", "-n", str(tail_n), path],
-            capture_output=True, text=True, timeout=5,
-        )
-        lines = proc.stdout.splitlines()
-        return {"lines": lines, "count": len(lines),
-                "path": path, "tail": tail_n}
-    except Exception as e:
-        raise HTTPException(500, f"tail_logs error: {e}")
-
-
 # ── Generic command endpoint ──────────────────────────────────────
 
 @app.post("/api/command")
-async def command(body: dict, request: Request):
+async def command(body: dict):
     """Send any command to QGIS bridge."""
     action = body.get("action", "")
     params = body.get("params", {})
     if not action:
         raise HTTPException(400, "Missing 'action' field")
-    if action == "execute_python" and not getattr(request.state, "elevated", False):
-        raise HTTPException(403, "elevated bearer token required for execute_python")
     return send_command(action, params)
 
 
@@ -284,55 +122,14 @@ async def screenshot(width: int = 800, height: int = 600, format: str = "png"):
 
 
 @app.post("/api/execute")
-async def execute_python(body: dict, request: Request):
-    if not getattr(request.state, "elevated", False):
-        raise HTTPException(403, "elevated bearer token required for execute_python")
+async def execute_python(body: dict):
     code = body.get("code", "")
     if not code:
         raise HTTPException(400, "Missing 'code' field")
-    if len(code.encode()) > MAX_EXECUTE_BYTES:
-        raise HTTPException(413, "code exceeds 256KB limit")
-    try:
-        user_timeout = max(1, min(int(body.get("timeout", 30)), MAX_EXECUTE_TIMEOUT))
-    except (TypeError, ValueError):
-        raise HTTPException(400, "invalid timeout")
-    # A6: audit-log the code and its return value to rotating JSON.
-    #     NEVER log the bearer token — only caller-IP, endpoint, timestamp,
-    #     code (truncated to MAX_EXECUTE_BYTES), return-shape summary.
-    audit_entry = {
-        "ts": int(time.time()),
-        "endpoint": "/api/execute",
-        "caller": request.client.host if request.client else "unknown",
-        "code_len": len(code),
-        "code_preview": code[:512],
-        "timeout": user_timeout,
-    }
-    try:
-        result = send_command("execute_python",
-                              {"code": code, "timeout": user_timeout},
-                              timeout=user_timeout + 30)
-        audit_entry["ok"] = True
-        audit_entry["result_type"] = type(result).__name__
-        audit_entry["result_size"] = len(json.dumps(result)) if result is not None else 0
-        audit_entry["result_preview"] = json.dumps(result)[:512] if result is not None else None
-        _audit.info(json.dumps(audit_entry))
-        return result
-    except HTTPException as e:
-        audit_entry["ok"] = False
-        audit_entry["error"] = f"HTTP {e.status_code}: {e.detail}"
-        _LAST_ERROR["ts"] = audit_entry["ts"]
-        _LAST_ERROR["endpoint"] = "/api/execute"
-        _LAST_ERROR["msg"] = audit_entry["error"]
-        _audit.info(json.dumps(audit_entry))
-        raise
-    except Exception as e:
-        audit_entry["ok"] = False
-        audit_entry["error"] = f"unexpected: {type(e).__name__}: {e}"
-        _LAST_ERROR["ts"] = audit_entry["ts"]
-        _LAST_ERROR["endpoint"] = "/api/execute"
-        _LAST_ERROR["msg"] = audit_entry["error"]
-        _audit.info(json.dumps(audit_entry))
-        raise HTTPException(500, str(e))
+    user_timeout = body.get("timeout", 30)
+    return send_command("execute_python",
+                        {"code": code, "timeout": user_timeout},
+                        timeout=user_timeout + 30)
 
 
 @app.post("/api/processing")

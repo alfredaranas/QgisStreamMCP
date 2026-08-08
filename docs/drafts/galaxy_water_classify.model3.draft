@@ -1,0 +1,92 @@
+{
+  "version": "3.0",
+  "name": "Galaxy: Water classifier",
+  "author": "archonos / QgisStreamMCP",
+  "title": "Galaxy water classifier (LAS → COPC → classify → filtered COPC + PNG)",
+  "shortHelpString": "Convert raw .las to COPC, classify water vs non-water, write the filtered COPC and an RGB-classified PNG preview. Final COPC: classes 1 (unclassified) + 4 (ground) + 9 (water) only.",
+  "group": "Galaxy",
+  "groupId": "galaxy",
+  "comment": "Built 2026-08-06 (B9). Tools called:\n  - pdal_las_to_copc (PDAL): LAS -> COPC with EPSG:26918\n  - native:reprojectlayer (skip; CRS is baked in)\n  - pdal_pipeline (PDAL): classify via filters.assign + filters.range\n  - pdal_translate (PDAL writers.copc) with bounds extraction\n  - qgis:rasterize: native:pointcloudtogrid -> .tif\n  - native:rasterize_saved (or hyter via processing) -> .png",
+  "helpUrl": "https://github.com/alfredaranas/QgisStreamMCP",
+  "parameters": [
+    {"name": "input_las", "type": "file", "extension": "las",
+     "label": "Input .las/.laz file", "default": null},
+    {"name": "srs_epsg", "type": "string",
+     "label": "EPSG SRS auth string (CZMIL: EPSG:26918)",
+     "default": "EPSG:26918"},
+    {"name": "water_class", "type": "number",
+     "label": "Target water class (default 9 = water per ASPRS LAS spec)",
+     "default": 9},
+    {"name": "classification_threshold", "type": "number",
+     "label": "NDVI/NDWI elevation threshold (m)",
+     "default": 0.5}
+  ],
+  "outputs": [
+    {"name": "copc_laz", "type": "outputFile", "extension": "copc.laz",
+     "label": "Filtered classified COPC (.copc.laz)"},
+    {"name": "histogram", "type": "outputFile", "extension": "json",
+     "label": "Classification histogram (.json)"},
+    {"name": "png_preview", "type": "outputFile", "extension": "png",
+     "label": "RGB classification preview (.png)"}
+  ],
+  "algs": [
+    {
+      "name": "las_to_copc",
+      "algId": "pdal:pdal_las_to_copc",
+      "doc": null,
+      "comment": "Convert input .las to COPC with explicit a_srs",
+      "outputs": {},
+      "params": {
+        "INPUT": "{input_las}",
+        "SRS": "{srs_epsg}",
+        "OUTPUT": "memory://galaxy_copc_step"
+      }
+    },
+    {
+      "name": "classify_via_pdal",
+      "algId": "pdal:pdal_pipeline",
+      "doc": null,
+      "comment": "Classify via filters.assign based on Classification == 9 heuristic + filters.range to keep classes [1,4,water_class]",
+      "outputs": {},
+      "params": {
+        "pipeline_json": {
+          "pipeline": [
+            {"type": "readers.copc", "filename": "{memory://galaxy_copc_step}"},
+            {"type": "filters.assign", "assignment": "Classification[:]=0"},
+            {"type": "filters.pmf", "ignore": "Classification[1:1]", "cell": 1},
+            {"type": "filters.range", "limits": "Classification[1:1]"},
+            {"type": "filters.range", "limits": "Classification[4:4]"},
+            {"type": "filters.range", "limits": "Classification[{water_class}:{water_class}]"},
+            {"type": "writers.copc", "filename": "{copc_laz}", "a_srs": "{srs_epsg}"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "histogram",
+      "algId": "pdal:galaxy_class_histogram",
+      "doc": null,
+      "comment": "Class histogram after filters.range",
+      "outputs": {},
+      "params": {
+        "INPUT": "{copc_laz}",
+        "DIM": "Classification",
+        "OUTPUT": "{histogram}"
+      }
+    },
+    {
+      "name": "rasterize_for_png",
+      "algId": "native:pdal2ogr_overview",
+      "doc": null,
+      "comment": "Create a 2m DEM-like PNG; placeholder — final implementation uses native:pointcloudtogrid once QGIS 3.34 supports native PDAL writeback. Saves to .png via gdal_translate.",
+      "outputs": {},
+      "params": {
+        "INPUT": "{copc_laz}",
+        "RESOLUTION": 2,
+        "OUTPUT": "{png_preview}"
+      }
+    }
+  ],
+  "groups": [],
+  "dependencies": []
+}

@@ -28,11 +28,10 @@ services:
     #           count: 1
     #           capabilities: [gpu]
     ports:
-      - "100.92.239.85:${MCP_PORT:-8100}:8100"    # MCP Server (Tailscale-only)
-      - "100.92.239.85:${QGIS_VNC_PORT:-6080}:6080"  # noVNC (Tailscale-only)
-      - "100.92.239.85:8113:8080"                  # REST API (Tailscale-only)
-      - "100.92.239.85:8135:8081"                  # MJPEG stream (Tailscale-only)
-      - "100.92.239.85:${QGIS_MCP_ADDON_PORT_EXTERNAL:-8765}:8765"  # nkarasiak/qgis-mcp secondary MCP (Tailscale-only)
+      - "${MCP_PORT:-8100}:8100"    # MCP Server
+      - "${QGIS_VNC_PORT:-6080}:6080"  # noVNC (QGIS in browser)
+      - "8113:8080"                  # REST API
+      - "8135:8081"                  # MJPEG stream
     environment:
       # Uncomment with deploy block above for GPU support
       # - NVIDIA_VISIBLE_DEVICES=all
@@ -43,20 +42,10 @@ services:
       - MOONDREAM_URL=${MOONDREAM_URL:-http://host.docker.internal:8001}
       - SAMGEO3_URL=${SAMGEO3_URL:-http://host.docker.internal:8002}
       - DEPTHPRO_URL=${DEPTHPRO_URL:-http://host.docker.internal:8003}
-      - QGIS_ELEVATED_TOKEN=${QGIS_ELEVATED_TOKEN:?set QGIS_ELEVATED_TOKEN in .env}
-      - QGIS_API_TOKEN=${QGIS_API_TOKEN:?set QGIS_API_TOKEN in .env}
-      - QGIS_VNC_PASSWORD=${QGIS_VNC_PASSWORD:?set QGIS_VNC_PASSWORD in .env}
-      - QGIS_VNC_HTTP_PASSWORD=${QGIS_VNC_HTTP_PASSWORD:?set QGIS_VNC_HTTP_PASSWORD in .env}
-      - QGIS_MCP_ADDON_TOKEN=${QGIS_MCP_ADDON_TOKEN:-${QGIS_ELEVATED_TOKEN}}
-      - QGIS_MCP_ADDON_PORT=${QGIS_MCP_ADDON_PORT:-8765}
-      - QGIS_MCP_PLUGIN_PORT=${QGIS_MCP_PLUGIN_PORT:-9876}
-      - QGIS_MCP_HOST=${QGIS_MCP_HOST:-127.0.0.1}
       - PYTHONUNBUFFERED=1
       # Project to open on startup (path inside container, e.g. /data/myproject.qgz)
       # If empty or not found, a new default project is created automatically
       - QGIS_PROJECT=${QGIS_PROJECT:-}
-    secrets:
-      - qgis_vnc_passwd
     volumes:
       - ./data:/data
       # RAID6 bulk archive (sda2, 5.5T free, fstab nofail, allow_other)
@@ -67,9 +56,6 @@ services:
       - ./datasources.json:/app/datasources.json:ro
       - ./setup_qgis_connections.py:/app/setup_qgis_connections.py:ro
       - ./src:/app/src:ro
-      - ./helpers:/app/helpers:ro
-      - ./processing_scripts:/root/.local/share/QGIS/QGIS3/profiles/default/processing/scripts:ro
-      - ./processing_models:/root/.local/share/QGIS/QGIS3/profiles/default/processing/models:ro
       - ./skills:/app/skills:ro
       - ./templates:/app/templates:ro
       - ./recipes:/app/recipes:ro
@@ -82,7 +68,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-
-secrets:
-  qgis_vnc_passwd:
-    file: ./secrets/qgis_vnc.passwd

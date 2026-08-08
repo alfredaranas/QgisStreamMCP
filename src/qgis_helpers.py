@@ -27,7 +27,7 @@ import traceback
 from pathlib import Path
 
 from qgis.core import (
-    QgsProject, QgsVectorLayer, QgsRasterLayer,
+    QgsProject, QgsVectorLayer, QgsRasterLayer, QgsPointCloudLayer,
     QgsCoordinateReferenceSystem, QgsCoordinateTransform,
     QgsRectangle, QgsPointXY, QgsFeature, QgsGeometry,
     QgsField, QgsFields, QgsExpressionContextUtils,
@@ -104,6 +104,11 @@ def _finalize_layer(layer):
         result["width"] = layer.width()
         result["height"] = layer.height()
         result["band_count"] = layer.bandCount()
+    elif isinstance(layer, QgsPointCloudLayer):
+        try:
+            result["point_count"] = layer.pointCount()
+        except Exception:
+            pass
     return result
 
 
@@ -476,7 +481,208 @@ def create_point_layer(name, points, fields=None, crs="EPSG:4326"):
     return _finalize_layer(layer)
 
 
+# ── Point cloud / PDAL ──────────────────────────────────────
+
+# Containerised PDAL install (ubuntugis-unstable PPA, added 2026-08-06). The
+# `pdal` CLI lives at /usr/bin/pdal; `pdal translate` reads raw .las/.laz and
+# writes COPC-LAZ directly, bypassing QGIS's native copc/ept/vpc-only stack.
+# We always invoke the binary via subprocess (never import pdal from QGIS's
+# python — libpdal16 links libgdal.so.37 / GDAL 3.11.4, while QGIS links
+# libgdal.so.34 / GDAL 3.8.4). Different SONAMEs, both load fine, but the
+# Python bindings can hit symbol-shadowing surprises; the CLI is bulletproof.
+# Single source of truth lives in helpers/pdal_copc.py (B7) — these wrappers
+# delegate to it and only add QGIS-specific behaviour (load to project).
+import sys as _sys
+_sys.path.insert(0, "/app")
+from helpers import pdal_copc as _pdal_copc  # noqa: E402
+_PDAL_BIN = _pdal_copc._PDAL_BIN
+
+
+def las_info(input_path):
+    """Return PDAL metadata for a .las/.laz/.copc.laz file as a dict.
+
+    Thin wrapper around helpers.pdal_copc.las_info. Same return contract.
+    """
+    return _pdal_copc.las_info(input_path, timeout=120)
+
+
+def las_to_copc(input_path, output_path=None, srs="EPSG:26918", auto_load=True):
+    """Convert raw .las/.laz to COPC-LAZ using the containerised PDAL.
+
+    Thin wrapper around helpers.pdal_copc.las_to_copc that adds an optional
+    QGIS auto-load step (loading the COPC as a point cloud layer in the
+    current project).
+
+    CRS gotcha: CZMIL LAS files ship with an empty comp_spatialreference.
+    Default EPSG:26918 (UTM 18N) is correct for NCMP / NC coast; pass another
+    EPSG:XXXX for a different zone; pass "" only if you have verified the
+    input already carries a valid CRS.
+    """
+    srs_epsg = srs if srs else None
+    res = _pdal_copc.las_to_copc(input_path, output_path, srs_epsg=srs_epsg,
+                                  timeout=600)
+    if not res.get("success"):
+        return res
+    if not auto_load:
+        return res
+    in_path = Path(input_path)
+    layer = QgsPointCloudLayer(str(res["output_path"]), in_path.stem, "copc")
+    if not layer.isValid():
+        res["warning"] = (
+            f"COPC file produced but QGIS refused to load it as a point "
+            f"cloud layer. Path is valid on disk: {res['output_path']}"
+        )
+        return res
+    merged = _finalize_layer(layer)
+    res.update(merged)
+    res["loaded"] = True
+    return res
+
+
+def pdal_pipeline(pipeline_json, inputs=None, output=None, timeout=1800):
+    """Run an arbitrary PDAL pipeline JSON.
+
+    Thin wrapper around helpers.pdal_copc.pdal_pipeline. Returns
+    {"success", "stdout", "stderr"} or {"error", "returncode"}.
+    """
+    return _pdal_copc.pdal_pipeline(pipeline_json, timeout=timeout)
+
+
 # ── Navigation ────────────────────────────────────────────────
+
+# ── Diagnostics (B10) ───────────────────────────────────────
+
+def qgis_diag_dump():
+    """One-shot dump of QGIS + plugin stack for debugging.
+
+    Returns:
+        Dict with QGIS version, processing providers, point cloud providers,
+        loaded plugins (relevant subset), project state, layer count.
+        Always safe to call — read-only.
+    """
+    info = {}
+    try:
+        from qgis import utils as qutils
+        info["qgis_version"] = qutils.Qgis.QGIS_VERSION
+    except Exception as e:
+        info["qgis_version_error"] = str(e)
+
+    try:
+        from qgis.core import QgsApplication, QgsProviderRegistry
+        info["providers"] = list(QgsProviderRegistry.instance().providerList())
+        info["processing_providers"] = []
+        try:
+            from processing.core.Processing import Processing
+            reg = Processing.instance().providerRegistry()
+            for p in reg.providers():
+                info["processing_providers"].append({
+                    "id": p.id(),
+                    "name": p.name(),
+                    "alg_count": len(p.algorithms()) if hasattr(p, "algorithms") else None,
+                })
+        except Exception as e:
+            info["processing_providers_error"] = str(e)
+
+        info["point_cloud_providers"] = [p for p in info["providers"]
+                                          if p.lower() in {"copc", "ept", "vpc"}]
+    except Exception as e:
+        info["providers_error"] = str(e)
+
+    try:
+        proj = _project()
+        info["project"] = {
+            "title": proj.title(),
+            "filename": proj.fileName(),
+            "layer_count": len(proj.mapLayers()),
+            "crs": proj.crs().authid(),
+        }
+    except Exception as e:
+        info["project_error"] = str(e)
+
+    info["pdal"] = _pdal_versions()
+    info["gdal"] = _gdal_versions()
+    info["otb"] = _otb_versions()
+    return info
+
+
+def qgis_healthcheck():
+    """Lightweight liveness/readiness probe for the MCP server.
+
+    Returns:
+        Dict with status="ok" or "degraded", per-subsystem booleans, and
+        a one-line summary suitable for /api/health/full (B16).
+    """
+    diag = qgis_diag_dump()
+    pc_ok = bool(diag.get("point_cloud_providers"))
+    pp_ok = any(p.get("id", "").lower() in {"gdal", "native", "grass", "saga", "otb", "pdal"}
+                for p in diag.get("processing_providers", []))
+    pdal_ok = bool(diag.get("pdal", {}).get("binary_version"))
+    gdal_ok = bool(diag.get("gdal", {}).get("version"))
+    return {
+        "status": "ok" if all([pc_ok, pp_ok, pdal_ok, gdal_ok]) else "degraded",
+        "point_cloud_providers": pc_ok,
+        "processing_providers": pp_ok,
+        "pdal": pdal_ok,
+        "gdal": gdal_ok,
+        "qgis_version": diag.get("qgis_version"),
+        "summary": (
+            f"QGIS {diag.get('qgis_version','?')} | "
+            f"GDAL {diag.get('gdal',{}).get('version','?')} | "
+            f"PDAL {diag.get('pdal',{}).get('binary_version','?')} | "
+            f"PC-providers={'OK' if pc_ok else 'MISSING'} | "
+            f"Processing={'OK' if pp_ok else 'DEGRADED'}"
+        ),
+    }
+
+
+def _pdal_versions():
+    import subprocess
+    out = {}
+    for cmd, key in (
+        (["/usr/bin/pdal", "--version"], "binary_version"),
+    ):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            out[key] = (r.stdout or r.stderr).strip().split("\n")[0]
+        except Exception as e:
+            out[key] = f"error: {e}"
+    try:
+        import pdal  # noqa
+        out["python_pdal"] = pdal.__version__
+    except Exception as e:
+        out["python_pdal_error"] = str(e)
+    return out
+
+
+def _gdal_versions():
+    import subprocess
+    out = {}
+    try:
+        r = subprocess.run(["gdalinfo", "--version"], capture_output=True, text=True, timeout=10)
+        out["version"] = (r.stdout or r.stderr).strip().split("\n")[0]
+    except Exception as e:
+        out["error"] = str(e)
+    try:
+        from osgeo import gdal
+        out["python_gdal"] = gdal.__version__
+        out["drivers_count"] = len(gdal.GetDriverByName("") or []) + 2  # noqa
+    except Exception as e:
+        out["python_gdal_error"] = str(e)
+    return out
+
+
+def _otb_versions():
+    import subprocess
+    out = {}
+    try:
+        r = subprocess.run(["otbcli_version", "--help"], capture_output=True, text=True, timeout=10)
+        out["available"] = r.returncode == 0
+    except FileNotFoundError:
+        out["available"] = False
+    except Exception as e:
+        out["error"] = str(e)
+    return out
+
 
 def bbox_from_canvas():
     """Get current canvas extent as [xmin, ymin, xmax, ymax] in EPSG:4326.

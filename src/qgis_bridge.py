@@ -502,10 +502,12 @@ class QGISBridge:
         return result
 
     # QGIS has native copc/ept/vpc point cloud providers (verified via
-    # QgsProviderRegistry 2026-07-29). Raw .las/.laz still needs converting to
-    # COPC first via the pdal sidecar container - PDAL is not in this image
-    # because the only build requires GDAL 3.11 vs QGIS 3.44's 3.8.
-    POINT_CLOUD_PROVIDERS = {"copc", "ept", "vpc", "pdal"}
+    # QgsProviderRegistry 2026-07-29). Raw .las/.laz is converted to COPC
+    # in-container by helpers.las_to_copc (added 2026-08-06). The "pdal" key
+    # was removed 2026-08-06 because QGIS does not have a provider named
+    # "pdal" — passing provider="pdal" produced an "Invalid point cloud
+    # layer" error. The set now matches what QGIS actually registers.
+    POINT_CLOUD_PROVIDERS = {"copc", "ept", "vpc"}
 
     def _action_add_vector_layer(self, params: dict) -> dict:
         uri = params.get("uri", "")

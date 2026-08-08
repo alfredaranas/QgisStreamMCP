@@ -61,3 +61,6 @@ gimp_*.py
 gimp_*.sh
 
 secrets/qgis_vnc.passwd
+
+# Build artifacts
+.rebuild-state/

@@ -185,16 +185,100 @@ TOOLS = [
     },
     {
         "name": "add_layer",
-        "description": "Add a layer to the QGIS project. Supports vector (GeoJSON, SHP, GPKG), raster (GeoTIFF, COG), WFS, WMS.",
+        "description": "Add a layer to the QGIS project. Supports vector (GeoJSON, SHP, GPKG), raster (GeoTIFF, COG), point cloud (COPC, EPT, VPC, pdal — file must be cloud-optimised; use las_to_copc for raw .las/.laz), WFS, WMS.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "uri": {"type": "string", "description": "Data source URI"},
                 "name": {"type": "string", "description": "Display name", "default": "layer"},
                 "layer_type": {"type": "string", "enum": ["vector", "raster", "wfs", "wms"], "default": "vector"},
-                "provider": {"type": "string", "description": "Data provider override", "default": ""}
+                "provider": {"type": "string", "description": "Data provider override (ogr, gdal, copc, ept, vpc, pdal, WFS, postgres, memory)", "default": ""}
             },
             "required": ["uri"]
+        }
+    },
+    {
+        "name": "las_to_copc",
+        "description": "Convert a raw .las or .laz point cloud file to cloud-optimised COPC-LAZ using the containerised PDAL, and optionally load it as a QGIS point cloud layer. Required because QGIS's native copc provider cannot read raw LAS — only COPC/EPT/VPC. Output written next to the input as <stem>.copc.laz unless output_path is given. CZMIL data has an empty comp_spatialreference — the default srs=EPSG:26918 (NAD83 / UTM 18N) injects the missing CRS via writers.copc.a_srs; override for data in another zone. Equivalent to helpers.las_to_copc() in execute_python.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "input_path": {"type": "string", "description": "Absolute path inside the container to a .las or .laz file (e.g. /archive/incoming/foo.las)"},
+                "output_path": {"type": "string", "description": "Absolute path for the .copc.laz output (default: alongside input as <stem>.copc.laz)", "default": ""},
+                "srs": {"type": "string", "description": "EPSG auth string to assign (default EPSG:26918 for CZMIL/NCMP; pass '' to inherit from input)", "default": "EPSG:26918"},
+                "auto_load": {"type": "boolean", "description": "If true, add the resulting COPC-LAZ as a QGIS point cloud layer (provider='copc')", "default": True}
+            },
+            "required": ["input_path"]
+        }
+    },
+    {
+        "name": "las_info",
+        "description": "Return PDAL metadata for a .las/.laz/.copc.laz file: point count, SRS, bounds. Wraps `pdal info --metadata`. Cheap sanity check before conversion.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "input_path": {"type": "string", "description": "Absolute path inside the container"}
+            },
+            "required": ["input_path"]
+        }
+    },
+    {
+        "name": "pdal_info",
+        "description": "B8: Raw `pdal info --metadata` JSON output for a file. Use las_info when you want a normalised dict; use pdal_info when you want the full PDAL schema (reader/writer stages, dimension list, coordinate system details).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "input_path": {"type": "string", "description": "Absolute path"}
+            },
+            "required": ["input_path"]
+        }
+    },
+    {
+        "name": "pdal_translate",
+        "description": "B8: Convert a point cloud with `pdal translate <INPUT> <OUTPUT> <FILTER>`. FILTER examples: 'COPC', 'las', 'laz', 'gray', 'dim'. Returns {success, output_path, command} or {error}.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "input_path": {"type": "string"},
+                "output_path": {"type": "string"},
+                "filter": {"type": "string", "default": "COPC"},
+                "options": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "Extra --writer.option=value flags (e.g. ['--writers.copc.a_srs=EPSG:26918'])",
+                    "default": []
+                }
+            },
+            "required": ["input_path", "output_path"]
+        }
+    },
+    {
+        "name": "pdal_pipeline",
+        "description": "B8: Run an arbitrary PDAL pipeline JSON (dict or list of stages). Use for chains of stages (filters + writers) that `pdal translate` can't express. Returns {success, stdout, stderr} or {error}.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "pipeline": {
+                    "description": "PDAL pipeline spec as a dict (e.g. {'pipeline': [...]}) or list of stages"
+                },
+                "timeout": {"type": "integer", "default": 600}
+            },
+            "required": ["pipeline"]
+        }
+    },
+    {
+        "name": "qgis_diag_dump",
+        "description": "B10: One-shot dump of QGIS + plugin stack: QGIS version, processing providers (id, name, alg_count), registered point cloud providers, project state, PDAL/GDAL/OTB versions. Read-only.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        }
+    },
+    {
+        "name": "qgis_healthcheck",
+        "description": "B10: Lightweight liveness/readiness probe. Returns {status: ok|degraded, point_cloud_providers, processing_providers, pdal, gdal, summary}. Same data as /health/full via REST.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
         }
     },
     {
@@ -931,6 +1015,117 @@ def _tool_add_layer(arguments: dict) -> dict:
     return {"content": _text(response) + _auto_screenshot()}
 
 
+def _tool_las_to_copc(arguments: dict) -> dict:
+    err = _validate_required(arguments, "input_path")
+    if err:
+        return _error(err)
+    params = {
+        "input_path": arguments["input_path"],
+        "srs": arguments.get("srs", "EPSG:26918"),
+        "auto_load": arguments.get("auto_load", True),
+    }
+    out_path = arguments.get("output_path", "").strip()
+    if out_path:
+        params["output_path"] = out_path
+    # Delegate to the helpers module inside QGIS via execute_python. The bridge
+    # action _action_execute_python already auto-saves and handles timeouts;
+    # we set timeout generously for large COPC conversion (10min cap).
+    code = (
+        "from qgis_helpers import las_to_copc as _h_las_to_copc\n"
+        "result.update(_h_las_to_copc(**{!r}))\n"
+    ).format(params)
+    response = qgis_command("execute_python", {"code": code, "timeout": 600})
+    return {"content": _text(response) + _auto_screenshot()}
+
+
+def _tool_las_info(arguments: dict) -> dict:
+    err = _validate_required(arguments, "input_path")
+    if err:
+        return _error(err)
+    code = (
+        "from qgis_helpers import las_info as _h_las_info\n"
+        "result.update(_h_las_info({!r}))\n"
+    ).format(arguments["input_path"])
+    response = qgis_command("execute_python", {"code": code, "timeout": 120})
+    return {"content": _text(response)}
+
+
+def _tool_pdal_info(arguments: dict) -> dict:
+    """B8: Run `pdal info --metadata` and return raw PDAL JSON for full detail."""
+    err = _validate_required(arguments, "input_path")
+    if err:
+        return _error(err)
+    code = (
+        "from helpers.pdal_copc import las_info\n"
+        "import json, sys; sys.path.insert(0, '/app')\n"
+        "result.update(las_info({!r}))\n"
+    ).format(arguments["input_path"])
+    response = qgis_command("execute_python", {"code": code, "timeout": 120})
+    return {"content": _text(response)}
+
+
+def _tool_pdal_translate(arguments: dict) -> dict:
+    """B8: Run `pdal translate <IN> <OUT> <FILTER>` with extra writer options."""
+    err = _validate_required(arguments, "input_path", "output_path")
+    if err:
+        return _error(err)
+    # pdal_translate delegates to las_to_copc; we still pass an empty
+    # srs_epsg because callers provide options. To honour CZMIL SRS rule,
+    # callers should include --writers.copc.a_srs=EPSG:XXXX in `options`.
+    code = (
+        "import sys; sys.path.insert(0, '/app')\n"
+        "from helpers.pdal_copc import las_to_copc as _h_pt\n"
+        "options = {!r}\n"
+        "out_path = {!r}\n"
+        "in_path  = {!r}\n"
+        "srs = ''\n"
+        "for o in options:\n"
+        "    if o.startswith('--writers.copc.a_srs='):\n"
+        "        srs = o.split('=', 1)[1]\n"
+        "_res = _h_pt(in_path, out_path, srs_epsg=srs or None, timeout=600)\n"
+        "result.update(_res)\n"
+    ).format(arguments.get("options", []),
+             arguments["output_path"], arguments["input_path"])
+    response = qgis_command("execute_python", {"code": code, "timeout": 600})
+    return {"content": _text(response)}
+
+
+def _tool_pdal_pipeline(arguments: dict) -> dict:
+    """B8: Run arbitrary PDAL pipeline JSON."""
+    err = _validate_required(arguments, "pipeline")
+    if err:
+        return _error(err)
+    timeout = int(arguments.get("timeout", 600))
+    code = (
+        "from helpers.pdal_copc import pdal_pipeline as _h_pp\n"
+        "import sys; sys.path.insert(0, '/app')\n"
+        "_res = _h_pp({!r}, timeout={!r})\n"
+        "result.update(_res)\n"
+    ).format(arguments["pipeline"], timeout)
+    response = qgis_command("execute_python", {"code": code, "timeout": timeout + 60})
+    return {"content": _text(response)}
+
+
+def _tool_qgis_diag_dump(arguments: dict) -> dict:
+    """B10: Dump QGIS + plugin stack."""
+    code = (
+        "from qgis_helpers import qgis_diag_dump as _h\n"
+        "result.update(_h())\n"
+    )
+    response = qgis_command("execute_python", {"code": code, "timeout": 30})
+    return {"content": _text(response, indent=2)}
+
+
+def _tool_qgis_healthcheck(arguments: dict) -> dict:
+    """B10: Lightweight readiness probe."""
+    code = (
+        "from qgis_helpers import qgis_healthcheck as _h\n"
+        "result.update(_h())\n"
+    )
+    response = qgis_command("execute_python", {"code": code, "timeout": 30})
+    return {"content": _text(response)}
+
+
 def _tool_remove_layer(arguments: dict) -> dict:
     err = _validate_required(arguments, "layer_id")
     if err:
@@ -1433,6 +1628,13 @@ TOOL_HANDLERS = {
     "open_project": _tool_open_project,
     "save_project": _tool_save_project,
     "add_layer": _tool_add_layer,
+    "las_to_copc": _tool_las_to_copc,
+    "las_info": _tool_las_info,
+    "pdal_info": _tool_pdal_info,
+    "pdal_translate": _tool_pdal_translate,
+    "pdal_pipeline": _tool_pdal_pipeline,
+    "qgis_diag_dump": _tool_qgis_diag_dump,
+    "qgis_healthcheck": _tool_qgis_healthcheck,
     "remove_layer": _tool_remove_layer,
     "get_features": _tool_get_features,
     "run_processing": _tool_run_processing,
@@ -1799,12 +2001,40 @@ async def handle_health(request: Request) -> JSONResponse:
 
 # ── Create Starlette app ──────────────────────────────────────────
 
+# A6 hardening: defense-in-depth bearer check for /mcp. Even though the
+# docker-compose bind restricts the MCP port to Tailscale (100.92.239.85),
+# a leaked SSH key or accidental LAN exposure would bypass that — require
+# the same bearer scheme used by api_server.py.
+_MCP_API_TOKEN = os.environ.get("QGIS_API_TOKEN", "").strip()
+_MCP_ELEVATED_TOKEN = os.environ.get("QGIS_ELEVATED_TOKEN", _MCP_API_TOKEN).strip()
+if not _MCP_API_TOKEN:
+    raise RuntimeError("QGIS_API_TOKEN must be set (A6 hardening)")
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse as _JSONResponse
+
+class _MCPSecurityMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # /health and / are unauthenticated for liveness probes
+        if request.url.path == "/health":
+            return await call_next(request)
+        supplied = request.headers.get("authorization", "")
+        token = supplied[7:].strip() if supplied.startswith("Bearer ") else ""
+        import secrets as _s
+        if not token or not (_s.compare_digest(token, _MCP_API_TOKEN) or _s.compare_digest(token, _MCP_ELEVATED_TOKEN)):
+            return _JSONResponse(status_code=401, content={"detail": "missing or invalid bearer token"})
+        return await call_next(request)
+
+
 app = Starlette(
     routes=[
         Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE"]),
         Route("/health", handle_health, methods=["GET"]),
     ]
 )
+app.add_middleware(_MCPSecurityMiddleware)
+# Expose the list of tool names for /api/tools introspection (B16)
+TOOL_NAMES = [t["name"] for t in TOOLS] if "TOOLS" in dir() else []  # noqa: F821
 
 
 # ══════════════════════════════════════════════════════════════════
